@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src https://api.github.com; worker-src 'self' blob:; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Euler Instability Archive</title>
+<link rel="stylesheet" href="vendor/fonts/fonts.css">
+<link rel="stylesheet" href="vendor/katex/katex.min.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+  <header class="mast">
+    <div class="wrap">
+      <div>
+        <h1>Euler Instability Archive</h1>
+        <p class="tally">Notes, findings and open questions on instability in the Euler equations</p>
+      </div>
+    </div>
+  </header>
+  <main class="main"><div class="wrap pad"><p class="quiet-line" data-opening>Opening the archive…</p></div></main>
+</div>
+<script src="vendor/preact.umd.min.js"></script>
+<script src="vendor/hooks.umd.min.js"></script>
+<script src="vendor/htm.umd.min.js"></script>
+<script src="vendor/marked.min.js"></script>
+<script src="vendor/purify.min.js"></script>
+<script src="vendor/katex/katex.min.js"></script>
+<script src="vendor/pdfjs/pdf.min.js"></script>
+<script src="remote.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
