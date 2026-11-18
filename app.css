@@ -164,7 +164,8 @@ a.ref[data-st]::before { content: ""; display: inline-block; width: 6px; height:
 .prose pre { overflow-x: auto; background: var(--sunk); padding: 10px 12px; border-radius: 7px; font-size: .85em; }
 .prose pre code { background: none; padding: 0; }
 .prose table { border-collapse: collapse; display: block; overflow-x: auto; font-size: .92em; }
-.prose th, .prose td { border: 1px solid var(--rule); padding: 4px 9px; }
+.prose th, .prose td { border: 1px solid var(--rule); padding: 4px 9px; vertical-align: top; overflow-wrap: break-word; }
+.prose th { font-family: var(--sans); font-size: .86em; font-weight: 600; color: var(--ink-2); background: color-mix(in srgb, var(--sunk) 55%, transparent); }
 .prose img { max-width: 100%; height: auto; }
 .prose hr { border: 0; border-top: 1px solid var(--rule); margin: 1.4em 0; }
 
