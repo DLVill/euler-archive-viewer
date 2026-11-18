@@ -323,24 +323,13 @@ button.topic:hover { background: var(--accent-wash); color: var(--accent); }
 .resolved > summary { cursor: pointer; color: var(--ink-2); font-weight: 500; width: max-content; }
 
 /* ---------- the picture ---------- */
-.picture { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 48px; align-items: start; }
-.pic-main .prose { max-width: 70ch; font-size: 17px; line-height: 1.6; }
+.pic-main .prose { font-size: 17px; line-height: 1.6; }
+/* Text keeps a readable measure; tables take the full width of the page. */
+.pic-main .prose > * { max-width: 70ch; }
+.pic-main .prose > table { max-width: none; }
+/* A table with four or more columns keeps them readable and scrolls sideways on a narrow screen. */
+.pic-main .prose > table:has(th:nth-child(4)) :is(th, td):not(:first-child) { min-width: 11em; }
 .pic-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 18px; }
-.aside { display: grid; gap: 30px; font-size: 13px; }
-.aside h3 { font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-2); margin-bottom: 9px; }
-.bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; gap: 2px; margin-bottom: 11px; }
-.bar span { background: var(--c); min-width: 3px; }
-.legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
-.legend li { display: grid; grid-template-columns: 16px 1fr auto; align-items: center; gap: 6px; }
-.legend .mark { color: var(--c); }
-.legend b { font-family: var(--mono); font-weight: 500; font-variant-numeric: tabular-nums; }
-.legend li.zero { color: var(--ink-3); }
-.ttable { width: 100%; border-collapse: collapse; }
-.ttable th { font-weight: 500; color: var(--ink-3); font-size: 11.5px; text-align: right; padding: 3px 0 5px 8px; }
-.ttable td { padding: 5px 0 5px 8px; text-align: right; border-top: 1px solid var(--rule-2); font-family: var(--mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
-.ttable th:first-child, .ttable td:first-child { text-align: left; padding-left: 0; font-family: var(--sans); }
-.waitlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
-.waitlist li { line-height: 1.35; color: var(--ink-2); }
 textarea.editor { min-height: 58vh; font-family: var(--mono); font-size: 13.5px; line-height: 1.55; }
 
 /* ---------- agents ---------- */
@@ -396,7 +385,6 @@ textarea.editor { min-height: 58vh; font-family: var(--mono); font-size: 13.5px;
 @media (max-width: 979px) {
   .note.split { display: block; }
   .reader { position: static; height: min(74vh, 680px); margin-bottom: 24px; }
-  .picture { grid-template-columns: minmax(0, 1fr); gap: 34px; }
 }
 @media (max-width: 640px) {
   :root { --rail: 92px; }

@@ -1486,35 +1486,6 @@ function QuestionsView({ focus }) {
 
 /* ------------------------------------------------------------------ the picture */
 
-function PictureAside() {
-  const total = S.findings.length;
-  const counts = {};
-  S.findings.forEach(f => { counts[f.standing] = (counts[f.standing] || 0) + 1; });
-  const topics = Array.from(S.ix.topics.keys()).map(t => {
-    const nums = new Set(S.notes.filter(n => n.topics.indexOf(t) !== -1).map(n => n.num));
-    const fs = S.findings.filter(f => nums.has(f.note));
-    return { t: t, n: fs.length, v: fs.filter(f => f.standing === 'verified').length, q: S.questions.filter(q => q.status === 'open' && nums.has(q.raised_in)).length };
-  }).sort((a, b) => b.n - a.n || a.t.localeCompare(b.t));
-  const waiting = S.findings.filter(f => f.standing === 'claimed').sort((a, b) => {
-    const da = (S.ix.noteByNum.get(a.note) || {}).date || '', db = (S.ix.noteByNum.get(b.note) || {}).date || '';
-    return da < db ? -1 : da > db ? 1 : idOrder(a.id, b.id);
-  }).slice(0, 6);
-  if (!total) return null;
-  return html`<aside class="aside">
-    <div><h3>Where things stand</h3>
-      <div class="bar" role="img" aria-label=${STANDINGS.filter(s => counts[s.id]).map(s => counts[s.id] + ' ' + s.id).join(', ')}>${STANDINGS.filter(s => counts[s.id]).map(s => html`<span key=${s.id} data-st=${s.id} style=${'flex:' + counts[s.id]}></span>`)}</div>
-      <ul class="legend">${STANDINGS.map(s => html`<li key=${s.id} data-st=${s.id} class=${counts[s.id] ? '' : 'zero'}><${Mark} st=${s.id} /><span>${s.label}</span><b>${counts[s.id] || 0}</b></li>`)}</ul>
-    </div>
-    ${topics.length ? html`<div><h3>By topic</h3>
-      <table class="ttable"><thead><tr><th>Topic</th><th>Findings</th><th>Verified</th><th>Open Q</th></tr></thead>
-      <tbody>${topics.map(r => html`<tr key=${r.t}><td><button class="lnk" onClick=${() => { S.ui.topic = r.t; S.ui.standing = 'all'; location.hash = 'findings'; }}>${r.t}</button></td><td>${r.n}</td><td>${r.v}</td><td>${r.q}</td></tr>`)}</tbody></table>
-    </div>` : null}
-    ${waiting.length ? html`<div><h3>Waiting for a reader</h3>
-      <ul class="waitlist">${waiting.map(f => html`<li key=${f.id}><${Refs} ids=${[f.id]} /> ${cap(f.kind)}${f.name ? html`: <${Rich} src=${f.name} inline=${true} />` : ''}</li>`)}</ul>
-    </div>` : null}
-  </aside>`;
-}
-
 function PictureView() {
   const [edit, setEdit] = useState(false);
   const [text, setText] = useState('');
@@ -1560,7 +1531,6 @@ function PictureView() {
         <${CodeBox} label="Or ask an agent" text=${prompt} />
       </div>`}
     </div>
-    <${PictureAside} />
   </div></div>`;
 }
 
