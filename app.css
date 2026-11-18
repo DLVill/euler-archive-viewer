@@ -269,6 +269,10 @@ button.topic:hover { background: var(--accent-wash); color: var(--accent); }
 .thm-label { font-family: var(--serif); font-weight: 700; font-size: 16.5px; }
 .thm-name { font-family: var(--serif); font-size: 16.5px; color: var(--ink-2); }
 .thm-body.it { font-style: italic; }
+.f-mark { padding: 0 5px; font-size: 10px; line-height: 1.6; letter-spacing: .07em; text-transform: uppercase; border: 1px solid currentColor; border-radius: 4px; }
+.f-mark.important { color: var(--accent); }
+.f-mark.irrelevant { color: var(--ink-3); }
+.thm.off .thm-label, .thm.off .thm-name, .thm.off .thm-body, .thm.off .remarks { color: var(--ink-3); }
 .thm-body.it .katex, .thm-body.it code { font-style: normal; }
 .thm-foot { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 9px; font-size: 12.5px; color: var(--ink-3); align-items: center; }
 .thm-foot .src { color: var(--ink-2); text-decoration: none; }

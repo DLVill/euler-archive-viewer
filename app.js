@@ -117,6 +117,7 @@ function signOut(code) {
   S.rev = '';
   S.notes = [];
   S.findings = [];
+  S.live = [];
   S.questions = [];
   S.picture = '';
   S.problems = [];
@@ -371,7 +372,7 @@ function parseRoute() {
 
 const S = {
   phase: 'opening', rev: '', me: '', by: lsGet('eia.by') || '',
-  notes: [], findings: [], questions: [], picture: '', problems: [], inbox: [], git: { repo: false },
+  notes: [], findings: [], live: [], questions: [], picture: '', problems: [], inbox: [], git: { repo: false },
   ix: { byId: new Map(), byNote: new Map(), usedBy: new Map(), noteByNum: new Map(), topics: new Map(), models: [], risk: new Map() },
   ui: { qNotes: '', topic: '', qFind: '', standing: 'all', identOpen: false, panel: null, notice: null, keyOpen: lsGet('eia.key') === '1' },
   route: parseRoute(), toast: null, pendingFiles: null, pendingTick: 0, syncing: false, dragging: false, signinError: null, appNew: '',
@@ -440,6 +441,8 @@ function reindex() {
     f._hay = [f.id, f.kind, f.name, f.statement, f.remarks.map(r => r.text).join(' '), n ? n.title : ''].join('\n').toLowerCase();
   });
   S.findings.sort((a, b) => b.note - a.note || a.idx - b.idx);
+  /* A finding one of you marked irrelevant stays in its note, and is left out of the lists and the counts. */
+  S.live = S.findings.filter(f => f.mark !== 'irrelevant');
   S.questions.sort((a, b) => b.num - a.num);
   S.ix = { byId: byId, byNote: byNote, usedBy: usedBy, noteByNum: noteByNum, topics: topics, models: Array.from(models).sort(), risk: risk };
 }
@@ -589,7 +592,7 @@ function Mark({ st }) {
    for pages that show marks without a name. Opened, it gives the meaning of all seven. */
 function StandingKey({ names }) {
   const counts = {};
-  S.findings.forEach(f => { counts[f.standing] = (counts[f.standing] || 0) + 1; });
+  S.live.forEach(f => { counts[f.standing] = (counts[f.standing] || 0) + 1; });
   const toggle = e => {
     const open = e.currentTarget.open;
     if (open === S.ui.keyOpen) return;
@@ -753,9 +756,9 @@ function Streamlines() {
 
 function tallyLine() {
   if (!S.notes.length && !S.questions.length) return 'Nothing filed yet';
-  const v = S.findings.filter(f => f.standing === 'verified').length;
+  const v = S.live.filter(f => f.standing === 'verified').length;
   const oq = S.questions.filter(q => q.status === 'open').length;
-  return [plural(S.notes.length, 'note'), plural(S.findings.length, 'finding') + (S.findings.length ? ', ' + v + ' verified' : ''), oq + ' open ' + (oq === 1 ? 'question' : 'questions')].join(' · ');
+  return [plural(S.notes.length, 'note'), plural(S.live.length, 'finding') + (S.live.length ? ', ' + v + ' verified' : ''), oq + ' open ' + (oq === 1 ? 'question' : 'questions')].join(' · ');
 }
 
 function Identity() {
@@ -810,7 +813,7 @@ function SyncControl() {
 function Rail() {
   const cur = (S.route.view === 'note' || S.route.view === 'add') ? 'notes' : S.route.view;
   const oq = S.questions.filter(q => q.status === 'open').length;
-  const tabs = [['notes', 'Notes', S.notes.length], ['findings', 'Findings', S.findings.length], ['questions', 'Questions', oq], ['picture', 'The picture', 0], ['agents', 'Agents', 0]];
+  const tabs = [['notes', 'Notes', S.notes.length], ['findings', 'Findings', S.live.length], ['questions', 'Questions', oq], ['picture', 'The picture', 0], ['agents', 'Agents', 0]];
   const bad = S.problems.filter(p => p.level !== 'todo');
   return html`<nav class="rail" aria-label="Sections"><div class="wrap">
     <div class="tabs">${tabs.map(t => html`<a key=${t[0]} class="tab" href=${'#' + t[0]} aria-current=${cur === t[0] ? 'page' : null}>${t[1]}${t[2] ? html`<span class="n">${t[2]}</span>` : null}</a>`)}</div>
@@ -853,7 +856,7 @@ function Banners() {
 const isNew = n => !isNaN(S.seenMax) && n.num > S.seenMax && n.filed_by !== S.by;
 
 function NoteRow({ n }) {
-  const fs = S.ix.byNote.get(n.num) || [];
+  const fs = (S.ix.byNote.get(n.num) || []).filter(f => f.mark !== 'irrelevant');
   const tally = {};
   fs.forEach(f => { tally[f.standing] = (tally[f.standing] || 0) + 1; });
   return html`<article class="row">
@@ -1154,11 +1157,17 @@ function FindingBlock({ f, source, onPage }) {
     await act('finding/delete', { id: f.id }, 'Finding ' + f.id + ' removed.');
     setBusy(false);
   };
-  return html`<article class="thm" id=${dom}>
+  const setMark = async (mark, msg) => {
+    setBusy(true);
+    await act('finding/mark', { id: f.id, mark: mark }, msg);
+    setBusy(false);
+  };
+  return html`<article class=${cx('thm', f.mark === 'irrelevant' && 'off')} id=${dom}>
     <div class="thm-head">
       <span class="thm-label">${cap(f.kind || 'claim')} ${f.id}</span>
       ${f.name ? html`<span class="thm-name">(<${Rich} src=${f.name} inline=${true} />)</span>` : null}
       <${StandingChip} f=${f} />
+      ${f.mark ? html`<span class=${'f-mark ' + f.mark} title=${f.mark === 'important' ? 'One of you marked this finding as important' : 'One of you marked this finding as irrelevant. It is left off the Findings page.'}>${f.mark}</span>` : null}
     </div>
     <${Rich} src=${f.statement} base=${n ? n.dir : ''} class=${cx('thm-body', ITALIC.has(f.kind) && 'it')} />
     ${culprit ? html`<p class="risk">Rests on <${Refs} ids=${[culprit]} />, which is marked ${(S.ix.byId.get(culprit) || {}).standing}.</p>` : null}
@@ -1180,6 +1189,10 @@ function FindingBlock({ f, source, onPage }) {
       ${f.rests_on.length ? html`<span>rests on <${Refs} ids=${f.rests_on} /></span>` : null}
       ${usedBy.length ? html`<span>used by <${Refs} ids=${usedBy} /></span>` : null}
       ${mode ? null : html`<span class="grow"></span>
+        ${f.mark === 'irrelevant'
+          ? html`<button class="lnk act" disabled=${busy} onClick=${() => setMark('', f.id + ' is back among the findings.')}>Restore</button>`
+          : html`<button class="lnk act" disabled=${busy} onClick=${() => setMark(f.mark === 'important' ? '' : 'important', f.id + (f.mark === 'important' ? ' is no longer marked important.' : ' marked important.'))}>${f.mark === 'important' ? 'Not important' : 'Important'}</button>
+            <button class="lnk act" disabled=${busy} onClick=${() => setMark('irrelevant', f.id + ' marked irrelevant. It stays in its note.')}>Irrelevant</button>`}
         <button class="lnk act" onClick=${() => setMode('remark')}>Remark</button>
         <button class="lnk act" onClick=${() => setMode('edit')}>Edit</button>
         <button class="lnk act danger" onClick=${() => setMode('del')}>Remove</button>`}
@@ -1198,13 +1211,20 @@ function FindingsView() {
     </div></div>`;
   }
   const counts = {};
-  S.findings.forEach(f => { counts[f.standing] = (counts[f.standing] || 0) + 1; });
+  S.live.forEach(f => { counts[f.standing] = (counts[f.standing] || 0) + 1; });
   const ts = terms(ui.qFind);
-  const list = S.findings.filter(f => {
-    if (ui.standing === 'risk' ? !S.ix.risk.has(f.id) : (ui.standing !== 'all' && f.standing !== ui.standing)) return false;
+  const matches = f => {
     if (ui.topic) { const n = S.ix.noteByNum.get(f.note); if (!n || n.topics.indexOf(ui.topic) === -1) return false; }
     return ts.every(t => f._hay.indexOf(t) !== -1);
+  };
+  const important = S.live.filter(f => f.mark === 'important').length;
+  const atRisk = S.live.filter(f => S.ix.risk.has(f.id)).length;
+  if (ui.standing === 'important' && !important) ui.standing = 'all';
+  const list = S.live.filter(f => {
+    if (ui.standing === 'risk' ? !S.ix.risk.has(f.id) : ui.standing === 'important' ? f.mark !== 'important' : (ui.standing !== 'all' && f.standing !== ui.standing)) return false;
+    return matches(f);
   });
+  const hidden = S.findings.filter(f => f.mark === 'irrelevant' && matches(f));
   const pill = (id, label, n) => html`<button key=${id} class=${cx('pill', ui.standing === id && 'on')} data-st=${ST[id] ? id : null} aria-pressed=${ui.standing === id} onClick=${() => { ui.standing = id; setLimit(40); emit(); }}>
     ${ST[id] ? html`<${Mark} st=${id} />` : null}${label}<span class="n">${n}</span></button>`;
   return html`<div class="wrap pad">
@@ -1213,13 +1233,18 @@ function FindingsView() {
       ${ui.topic ? html`<span class="topic">${ui.topic}<button type="button" aria-label="Clear the topic filter" onClick=${() => { ui.topic = ''; emit(); }}>×</button></span>` : null}
     </div>
     <div class="pills" role="group" aria-label="Filter by standing">
-      ${pill('all', 'All', S.findings.length)}
+      ${pill('all', 'All', S.live.length)}
+      ${important ? pill('important', 'Important', important) : null}
       ${STANDINGS.filter(s => counts[s.id]).map(s => pill(s.id, s.label, counts[s.id]))}
-      ${S.ix.risk.size ? pill('risk', 'At risk', S.ix.risk.size) : null}
+      ${atRisk ? pill('risk', 'At risk', atRisk) : null}
     </div>
     <${StandingKey} />
     ${list.length ? html`<div class="thms">${list.slice(0, limit).map(f => html`<${FindingBlock} key=${f.id} f=${f} source=${true} />`)}</div>` : html`<p class="quiet-line">No finding matches.</p>`}
     ${list.length > limit ? html`<div class="hstack" style="margin-top:14px"><button class="btn" onClick=${() => setLimit(limit + 60)}>Show ${Math.min(60, list.length - limit)} more</button></div>` : null}
+    ${hidden.length ? html`<details class="resolved"><summary>${plural(hidden.length, 'finding')} marked irrelevant</summary>
+      <p class="quiet-line">Left out of the list and the counts above. Each one is still in its note.</p>
+      <div class="thms">${hidden.map(f => html`<${FindingBlock} key=${f.id} f=${f} source=${true} />`)}</div>
+    </details>` : null}
   </div>`;
 }
 
