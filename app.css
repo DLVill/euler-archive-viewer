@@ -202,6 +202,28 @@ button.chip:hover { border-color: var(--c); }
 .row-tally { display: flex; gap: 10px; align-items: flex-start; padding-top: 5px; }
 .tl { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .tl .mark { color: var(--c); }
+
+/* Key to the standing marks: one quiet line that opens into their meanings. */
+.key { margin: 0 0 12px; font-size: 13px; color: var(--ink-2); }
+.key > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 14px; width: fit-content; max-width: 100%; padding: 3px 0; cursor: pointer; list-style: none; border-radius: 6px; }
+.key > summary::-webkit-details-marker { display: none; }
+.key-h { font-family: var(--mono); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
+.key > summary .tl { font-family: var(--sans); font-size: 13px; gap: 5px; }
+.key-more { display: inline-flex; align-items: center; gap: 5px; color: var(--accent); font-weight: 500; }
+.key > summary:hover .key-more { text-decoration: underline; text-underline-offset: 3px; }
+.key-more .caret { transition: transform .15s ease; }
+.key[open] .key-more .caret { transform: rotate(180deg); }
+.key-body { margin-top: 8px; padding: 13px 15px 14px; max-width: 640px; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; }
+.key-body p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
+.key-body p + .key-list, .key-list + p { margin-top: 10px; }
+.key-body p b { color: var(--ink); font-weight: 600; }
+.key-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.key-list li { display: grid; grid-template-columns: 14px 92px minmax(0, 1fr) auto; align-items: baseline; column-gap: 9px; line-height: 1.4; }
+.key-list .mark { color: var(--c); align-self: center; }
+.key-list b { font-weight: 600; color: var(--ink); }
+.key-list i { font-style: normal; font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.key-list li.zero b { font-weight: 500; color: var(--ink-2); }
+@media (prefers-reduced-motion: reduce) { .key-more .caret { transition: none; } }
 .topic { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 5px; border: 0; background: var(--sunk); color: var(--ink-2); font-size: 12px; font-weight: 500; position: relative; z-index: 1; }
 button.topic:hover { background: var(--accent-wash); color: var(--accent); }
 .topic button { border: 0; background: none; padding: 0 0 0 2px; color: var(--ink-3); font-size: 14px; line-height: 1; }
@@ -385,6 +407,8 @@ textarea.editor { min-height: 58vh; font-family: var(--mono); font-size: 13.5px;
   .flow { opacity: .22; }
   .row { grid-template-columns: 30px minmax(0, 1fr); }
   .row-tally { grid-column: 2; padding-top: 2px; }
+  .key-list li { grid-template-columns: 14px minmax(0, 1fr) auto; row-gap: 1px; }
+  .key-list li > span { grid-column: 2 / -1; grid-row: 2; }
   .rail-end .wide { display: none; }
   .q { grid-template-columns: 36px minmax(0, 1fr); }
 }

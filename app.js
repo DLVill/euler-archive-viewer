@@ -369,7 +369,7 @@ const S = {
   phase: 'opening', rev: '', me: '', by: lsGet('eia.by') || '',
   notes: [], findings: [], questions: [], picture: '', problems: [], inbox: [], git: { repo: false },
   ix: { byId: new Map(), byNote: new Map(), usedBy: new Map(), noteByNum: new Map(), topics: new Map(), models: [], risk: new Map() },
-  ui: { qNotes: '', topic: '', qFind: '', standing: 'all', identOpen: false, panel: null, notice: null },
+  ui: { qNotes: '', topic: '', qFind: '', standing: 'all', identOpen: false, panel: null, notice: null, keyOpen: lsGet('eia.key') === '1' },
   route: parseRoute(), toast: null, pendingFiles: null, pendingTick: 0, syncing: false, dragging: false, signinError: null,
   seenMax: parseInt(lsGet('eia.seen') || '', 10),
 };
@@ -577,6 +577,34 @@ const MARKS = {
 };
 function Mark({ st }) {
   return html`<svg class="mark" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${(MARKS[st] || MARKS.claimed)()}</svg>`;
+}
+
+/* A key to the standing marks. With `names`, the marks in use and their names sit on the closed line,
+   for pages that show marks without a name. Opened, it gives the meaning of all seven. */
+function StandingKey({ names }) {
+  const counts = {};
+  S.findings.forEach(f => { counts[f.standing] = (counts[f.standing] || 0) + 1; });
+  const toggle = e => {
+    const open = e.currentTarget.open;
+    if (open === S.ui.keyOpen) return;
+    S.ui.keyOpen = open;
+    if (open) lsSet('eia.key', '1'); else lsDel('eia.key');
+    emit();
+  };
+  return html`<details class="key" open=${S.ui.keyOpen} onToggle=${toggle}>
+    <summary>
+      <span class="key-h">Key</span>
+      ${names ? STANDINGS.filter(s => counts[s.id]).map(s => html`<span key=${s.id} class="tl" data-st=${s.id}><${Mark} st=${s.id} />${s.label}</span>`) : null}
+      <span class="key-more">${names ? 'What they mean' : 'What the standings mean'}<svg class="caret" viewBox="0 0 8 8" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 3l2.5 2.5L6.5 3" /></svg></span>
+    </summary>
+    <div class="key-body">
+      <p>A standing says how far a finding can be trusted.${names ? ' Beside each note, a mark with a number counts its findings with that standing.' : ''}</p>
+      <ul class="key-list">${STANDINGS.map(s => html`<li key=${s.id} data-st=${s.id} class=${counts[s.id] ? '' : 'zero'}>
+        <${Mark} st=${s.id} /><b>${s.label}</b><span>${s.desc}</span><i>${counts[s.id] ? counts[s.id] : 'none yet'}</i>
+      </li>`)}</ul>
+      ${S.ix.risk.size ? html`<p><b>At risk</b> marks a finding that rests on one marked gap or refuted.</p>` : null}
+    </div>
+  </details>`;
 }
 
 function Refs({ ids }) {
@@ -850,6 +878,7 @@ function NotesView() {
         ${topics.map(t => html`<option key=${t[0]} value=${t[0]}>${t[0]} (${t[1]})</option>`)}
       </select>` : null}
     </div>
+    ${S.findings.length ? html`<${StandingKey} names=${true} />` : null}
     ${list.length ? html`<div class="rows">${list.map(n => html`<${NoteRow} key=${n.num} n=${n} />`)}</div>`
       : html`<p class="quiet-line">No note matches. <button class="lnk" onClick=${() => { ui.qNotes = ''; ui.topic = ''; emit(); }}>Clear the filters</button></p>`}
   </div>`;
@@ -1172,6 +1201,7 @@ function FindingsView() {
       ${STANDINGS.filter(s => counts[s.id]).map(s => pill(s.id, s.label, counts[s.id]))}
       ${S.ix.risk.size ? pill('risk', 'At risk', S.ix.risk.size) : null}
     </div>
+    <${StandingKey} />
     ${list.length ? html`<div class="thms">${list.slice(0, limit).map(f => html`<${FindingBlock} key=${f.id} f=${f} source=${true} />`)}</div>` : html`<p class="quiet-line">No finding matches.</p>`}
     ${list.length > limit ? html`<div class="hstack" style="margin-top:14px"><button class="btn" onClick=${() => setLimit(limit + 60)}>Show ${Math.min(60, list.length - limit)} more</button></div>` : null}
   </div>`;
