@@ -315,6 +315,7 @@ button.topic:hover { background: var(--accent-wash); color: var(--accent); }
 .qlist > .q:first-child { border-top: 0; }
 .q-label { font-family: var(--mono); font-size: 13px; color: var(--ink-3); padding-top: 3px; }
 .q.done .q-text { color: var(--ink-2); }
+.q-major { display: block; width: max-content; margin-top: 5px; padding: 0 4px; font-size: 9.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--accent); border: 1px solid currentColor; border-radius: 4px; }
 .view-head { margin-bottom: 18px; }
 .view-head h2 { font-family: var(--serif); font-size: 24px; font-weight: 600; letter-spacing: -.008em; }
 .view-head .lede { color: var(--ink-2); font-size: 15px; margin-top: 5px; max-width: 66ch; }

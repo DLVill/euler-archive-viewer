@@ -1412,7 +1412,7 @@ function QuestionItem({ q, compact }) {
   const run = async (path, body, msg) => { setBusy(true); const ok = await act(path, body, msg); setBusy(false); if (ok) setMode(null); };
   const refs = ans.split(/[,;\s]+/).filter(x => /^\d+\.\d+$/.test(x));
   return html`<article class=${cx('q', resolved && 'done')} id=${dom}>
-    <div class="q-label">Q${q.num}</div>
+    <div class="q-label">Q${q.num}${q.major ? html`<span class="q-major" title="One of you regards this as a major question">major</span>` : null}</div>
     <div>
       ${mode === 'edit' ? html`<form class="inline-form" style="margin-top:0" onSubmit=${e => { e.preventDefault(); if (text.trim()) run('question/edit', { num: q.num, text: text.trim() }); }}>
         <label class="lab" for=${dom + '-edit'}>Question ${q.num}</label>
@@ -1437,6 +1437,7 @@ function QuestionItem({ q, compact }) {
         ${mode ? null : html`<span class="grow"></span>
           ${resolved ? html`<button class="lnk act" onClick=${() => run('question/reopen', { num: q.num }, 'Q' + q.num + ' reopened.')}>Reopen</button>`
             : html`<button class="lnk act" onClick=${() => { setText(''); setAns(''); setMode('resolve'); }}>Resolve</button>`}
+          ${resolved ? null : html`<button class="lnk act" onClick=${() => run('question/major', { num: q.num, major: !q.major }, 'Q' + q.num + (q.major ? ' is no longer marked major.' : ' marked major.'))}>${q.major ? 'Not major' : 'Mark major'}</button>`}
           <button class="lnk act" onClick=${() => { setText(q.text); setMode('edit'); }}>Edit</button>
           <button class="lnk act danger" onClick=${() => setMode('del')}>Remove</button>`}
       </div>
@@ -1447,7 +1448,9 @@ function QuestionItem({ q, compact }) {
 function QuestionsView({ focus }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
-  const open = S.questions.filter(q => q.status === 'open'), done = S.questions.filter(q => q.status !== 'open');
+  // Major questions first; otherwise the order of the archive.
+  const open = S.questions.filter(q => q.status === 'open').map((q, i) => [q, i]).sort((x, y) => (y[0].major ? 1 : 0) - (x[0].major ? 1 : 0) || x[1] - y[1]).map(x => x[0]);
+  const done = S.questions.filter(q => q.status !== 'open');
   const focusDone = focus != null && done.some(q => q.num === focus);
   useEffect(() => {
     if (focus == null) return undefined;
@@ -1467,7 +1470,7 @@ function QuestionsView({ focus }) {
     if (ok) setText('');
   };
   return html`<div class="wrap pad">
-    <div class="view-head"><h2>Open questions</h2><p class="lede">What the theory still has to explain. Point an agent at one, or settle it and say which finding does.</p></div>
+    <div class="view-head"><h2>Open questions</h2><p class="lede">What the theory still has to explain. Point an agent at one, or settle it and say which finding does. The ones you regard as major come first.</p></div>
     <form class="inline-form panel" style="margin-bottom:8px" onSubmit=${ask}>
       <label class="lab" for="q-new">Ask a question</label>
       <textarea id="q-new" class="in tex" rows="2" value=${text} onInput=${e => setText(e.target.value)} placeholder="One self-contained question. Markdown, with $…$ for mathematics." />
