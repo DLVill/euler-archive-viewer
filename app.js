@@ -60,6 +60,10 @@ const idOrder = (a, b) => { const x = a.split('.').map(Number), y = b.split('.')
    in this browser only and is sent to GitHub and nowhere else. */
 const REMOTE = window.ARCHIVE_REMOTE || null;
 const ASSETS = REMOTE ? '' : '/app/';
+/* The fingerprint of the code this page was loaded with. The data says which fingerprint is current,
+   so an open page can tell when it has been updated and still runs old code or styles. */
+const APPV = REMOTE ? (REMOTE.app || '') : ((document.querySelector('meta[name="archive-app"]') || {}).content || '');
+if (REMOTE && /[?&]v=/.test(location.search)) { try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) {} }
 let ghToken = REMOTE ? (lsGet('eia.token') || '') : '';
 
 const undo = s => { try { return decodeURIComponent(s); } catch (e) { return s; } };
@@ -370,7 +374,7 @@ const S = {
   notes: [], findings: [], questions: [], picture: '', problems: [], inbox: [], git: { repo: false },
   ix: { byId: new Map(), byNote: new Map(), usedBy: new Map(), noteByNum: new Map(), topics: new Map(), models: [], risk: new Map() },
   ui: { qNotes: '', topic: '', qFind: '', standing: 'all', identOpen: false, panel: null, notice: null, keyOpen: lsGet('eia.key') === '1' },
-  route: parseRoute(), toast: null, pendingFiles: null, pendingTick: 0, syncing: false, dragging: false, signinError: null,
+  route: parseRoute(), toast: null, pendingFiles: null, pendingTick: 0, syncing: false, dragging: false, signinError: null, appNew: '',
   seenMax: parseInt(lsGet('eia.seen') || '', 10),
 };
 
@@ -452,6 +456,7 @@ function apply(st) {
   S.inbox = st.inbox || [];
   S.git = st.git || { repo: false };
   S.viewer = st.viewer || '';
+  S.appNew = (st.app && APPV && st.app !== APPV && st.app !== lsGet('eia.appv')) ? st.app : '';
   S.phase = 'live';
   reindex();
   emit();
@@ -524,6 +529,7 @@ async function poll() {
     const r = await fetch('/api/rev', { cache: 'no-store' });
     const d = await r.json();
     if (S.phase === 'down') { S.phase = 'live'; emit(); }
+    if (d.app && APPV && d.app !== APPV && d.app !== lsGet('eia.appv') && d.app !== S.appNew) { S.appNew = d.app; emit(); }
     if (d.rev !== S.rev) apply(await call('state'));
   } catch (e) {
     if (S.phase === 'live') { S.phase = 'down'; emit(); }
@@ -816,8 +822,18 @@ function Rail() {
   </div></nav>`;
 }
 
+function reloadApp() {
+  lsSet('eia.appv', S.appNew);
+  // Online, a plain reload can be answered from a stored copy of the page. A new address cannot.
+  if (REMOTE) location.replace(location.pathname + '?v=' + encodeURIComponent(S.appNew) + location.hash);
+  else location.reload();
+}
+
 function Banners() {
   const out = [];
+  if (S.appNew) out.push(html`<div class="banner" key="appnew"><h4>This page has been updated</h4>
+    Reload it to get the new version. Until you do, parts of it can look wrong.
+    <div class="hstack"><button class="btn sm primary" onClick=${reloadApp}>Reload</button><button class="btn sm" onClick=${() => { lsSet('eia.appv', S.appNew); S.appNew = ''; emit(); }}>Not now</button></div></div>`);
   if (S.phase === 'down') out.push(REMOTE
     ? html`<div class="banner err" key="down"><h4>GitHub is not answering</h4>What you see may be out of date. This page keeps trying and catches up by itself.</div>`
     : html`<div class="banner err" key="down"><h4>The archive tool has stopped</h4>What you see may be out of date, and changes cannot be saved. Run <code>./archive open</code> again in the archive folder; this page reconnects by itself.</div>`);
