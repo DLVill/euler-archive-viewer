@@ -434,10 +434,24 @@ function richHtml(src, inline, base) {
   return out;
 }
 
+/* Rendered text is cached by its source, so the marks on the findings it cites are added after
+   each render: a reference to an important finding gets a star. */
+function markRefs(el) {
+  if (!el) return;
+  el.querySelectorAll('a.ref[href^="#finding-"]').forEach(a => {
+    const m = /^#finding-(\d+)-(\d+)$/.exec(a.getAttribute('href') || '');
+    const f = m && S.ix.byId.get(m[1] + '.' + m[2]);
+    const imp = !!(f && f.mark === 'important');
+    if (imp !== a.hasAttribute('data-imp')) a.toggleAttribute('data-imp', imp);
+  });
+}
+
 function Rich(props) {
   const src = props.src, inline = !!props.inline, base = props.base || '';
   const out = useMemo(() => richHtml(src, inline, base), [src, inline, base]);
-  return h(props.tag || (inline ? 'span' : 'div'), { class: cx('rich', !inline && 'prose', props.class), dangerouslySetInnerHTML: { __html: out } });
+  const el = useRef(null);
+  useEffect(() => { markRefs(el.current); });
+  return h(props.tag || (inline ? 'span' : 'div'), { ref: el, class: cx('rich', !inline && 'prose', props.class), dangerouslySetInnerHTML: { __html: out } });
 }
 
 const hasMath = s => /[$\\]/.test(s || '');
@@ -676,6 +690,11 @@ const MARKS = {
   gap: () => html`<path d="M6 2l4.5 8h-9z" />`,
   refuted: () => html`<path d="M3 3l6 6M9 3l-6 6" />`,
 };
+/* The star of a finding one of you marked important: filled when marked, an outline as a button when not. */
+function Star({ on }) {
+  return html`<svg class="star-i" viewBox="0 0 16 16" width="16" height="16" fill=${on ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.8l1.53 4.5 4.75.06-3.81 2.84 1.41 4.54L8 11l-3.88 2.74 1.41-4.54-3.81-2.84 4.75-.06z" /></svg>`;
+}
+
 function Mark({ st }) {
   return html`<svg class="mark" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${(MARKS[st] || MARKS.claimed)()}</svg>`;
 }
@@ -712,7 +731,8 @@ function Refs({ ids }) {
   return ids.map((id, i) => {
     const f = S.ix.byId.get(id);
     const title = f ? cap(f.kind) + (f.name ? ': ' + f.name : '') + ' (' + ((ST[f.standing] || {}).label || f.standing || 'no standing') + ')' : 'Not in the archive';
-    return html`${i ? ', ' : ''}<a class="ref" data-st=${f ? f.standing : null} href=${fidHash(id)} title=${title}>${id}</a>`;
+    const imp = !!(f && f.mark === 'important');
+    return html`${i ? ', ' : ''}<a class="ref" data-st=${f ? f.standing : null} data-imp=${imp ? '' : null} href=${fidHash(id)} title=${imp ? title + ', marked important' : title}>${id}</a>`;
   });
 }
 
@@ -951,6 +971,7 @@ function NoteRow({ n }) {
   const fs = (S.ix.byNote.get(n.num) || []).filter(f => f.mark !== 'irrelevant');
   const tally = {};
   fs.forEach(f => { tally[f.standing] = (tally[f.standing] || 0) + 1; });
+  const nImp = fs.filter(f => f.mark === 'important').length;
   return html`<article class="row">
     <div class="num">${n.num}</div>
     <div>
@@ -965,7 +986,7 @@ function NoteRow({ n }) {
         ${n.topics.map(t => html`<button key=${t} class="topic" onClick=${() => { S.ui.topic = t; emit(); }}>${t}</button>`)}
       </div>
     </div>
-    <div class="row-tally">${STANDINGS.filter(s => tally[s.id]).map(s => html`<span key=${s.id} class="tl" data-st=${s.id} title=${s.label}><${Mark} st=${s.id} />${tally[s.id]}</span>`)}</div>
+    <div class="row-tally">${nImp ? html`<span class="tl imp" title=${plural(nImp, 'finding') + ' marked important'}><${Star} on=${true} />${nImp}</span>` : null}${STANDINGS.filter(s => tally[s.id]).map(s => html`<span key=${s.id} class="tl" data-st=${s.id} title=${s.label}><${Mark} st=${s.id} />${tally[s.id]}</span>`)}</div>
   </article>`;
 }
 
@@ -1254,12 +1275,17 @@ function FindingBlock({ f, source, onPage }) {
     await act('finding/mark', { id: f.id, mark: mark }, msg);
     setBusy(false);
   };
-  return html`<article class=${cx('thm', f.mark === 'irrelevant' && 'off')} id=${dom}>
+  const imp = f.mark === 'important', off = f.mark === 'irrelevant';
+  return html`<article class=${cx('thm', imp && 'imp', off && 'off')} id=${dom}>
     <div class="thm-head">
       <span class="thm-label">${cap(f.kind || 'claim')} ${f.id}</span>
       ${f.name ? html`<span class="thm-name">(<${Rich} src=${f.name} inline=${true} />)</span>` : null}
       <${StandingChip} f=${f} />
-      ${f.mark ? html`<span class=${'f-mark ' + f.mark} title=${f.mark === 'important' ? 'One of you marked this finding as important' : 'One of you marked this finding as irrelevant. It is left off the Findings page.'}>${f.mark}</span>` : null}
+      ${off ? html`<span class="f-mark irrelevant" title="One of you marked this finding as irrelevant. It is left off the Findings page.">irrelevant</span>`
+        : html`<button type="button" class=${cx('star', imp && 'on')} aria-pressed=${imp} disabled=${busy}
+            title=${imp ? 'One of you marked this finding as important. Click to take the mark away.' : 'Mark this finding as important'}
+            onClick=${() => setMark(imp ? '' : 'important', f.id + (imp ? ' is no longer marked important.' : ' marked important.'))}>
+            <${Star} on=${imp} />${imp ? html`<span>Important</span>` : html`<span class="vh">Mark as important</span>`}</button>`}
     </div>
     <${Rich} src=${f.statement} base=${n ? n.dir : ''} class=${cx('thm-body', ITALIC.has(f.kind) && 'it')} />
     ${culprit ? html`<p class="risk">Rests on <${Refs} ids=${[culprit]} />, which is marked ${(S.ix.byId.get(culprit) || {}).standing}.</p>` : null}
@@ -1281,10 +1307,9 @@ function FindingBlock({ f, source, onPage }) {
       ${f.rests_on.length ? html`<span>rests on <${Refs} ids=${f.rests_on} /></span>` : null}
       ${usedBy.length ? html`<span>used by <${Refs} ids=${usedBy} /></span>` : null}
       ${mode ? null : html`<span class="grow"></span>
-        ${f.mark === 'irrelevant'
+        ${off
           ? html`<button class="lnk act mk" disabled=${busy} onClick=${() => setMark('', f.id + ' is back among the findings.')}>Restore</button>`
-          : html`<button class="lnk act mk" disabled=${busy} onClick=${() => setMark(f.mark === 'important' ? '' : 'important', f.id + (f.mark === 'important' ? ' is no longer marked important.' : ' marked important.'))}>${f.mark === 'important' ? 'Not important' : 'Mark important'}</button>
-            <button class="lnk act mk" disabled=${busy} onClick=${() => setMark('irrelevant', f.id + ' marked irrelevant. It stays in its note.')}>Mark irrelevant</button>`}
+          : html`<button class="lnk act mk" disabled=${busy} onClick=${() => setMark('irrelevant', f.id + ' marked irrelevant. It stays in its note.')}>Mark irrelevant</button>`}
         <button class="lnk act" onClick=${() => setMode('remark')}>Remark</button>
         <button class="lnk act" onClick=${() => setMode('edit')}>Edit</button>
         <button class="lnk act danger" onClick=${() => setMode('del')}>Remove</button>`}
@@ -1295,6 +1320,10 @@ function FindingBlock({ f, source, onPage }) {
 function FindingsView() {
   const ui = S.ui;
   const [limit, setLimit] = useState(40);
+  /* The findings marked important when this page was opened come first. Marking one here does not
+     move it until the page is opened again, so nothing jumps away from under the pointer. */
+  const pin = useRef(null);
+  if (pin.current === null && S.live.length) pin.current = new Set(S.live.filter(f => f.mark === 'important').map(f => f.id));
   if (!S.findings.length) {
     return html`<div class="wrap pad"><div class="empty">
       <h2>No findings yet</h2>
@@ -1316,6 +1345,7 @@ function FindingsView() {
     if (ui.standing === 'risk' ? !S.ix.risk.has(f.id) : ui.standing === 'important' ? f.mark !== 'important' : (ui.standing !== 'all' && f.standing !== ui.standing)) return false;
     return matches(f);
   });
+  if (pin.current && pin.current.size) list.sort((a, b) => (pin.current.has(b.id) ? 1 : 0) - (pin.current.has(a.id) ? 1 : 0));
   const hidden = S.findings.filter(f => f.mark === 'irrelevant' && matches(f));
   const pill = (id, label, n) => html`<button key=${id} class=${cx('pill', ui.standing === id && 'on')} data-st=${ST[id] ? id : null} aria-pressed=${ui.standing === id} onClick=${() => { ui.standing = id; setLimit(40); emit(); }}>
     ${ST[id] ? html`<${Mark} st=${id} />` : null}${label}<span class="n">${n}</span></button>`;
