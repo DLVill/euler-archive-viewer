@@ -52,12 +52,13 @@ const isTex = f => !!f && /\.(tex|ltx|latex)$/i.test(f.name || '');
 const terms = q => q.toLowerCase().split(/\s+/).filter(Boolean);
 const idOrder = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); return x[0] - y[0] || x[1] - y[1]; };
 
-/* ------------------------------------------------------------------ the online, read-only copy */
+/* ------------------------------------------------------------------ the online copy */
 
 /* Published as a plain web page, the app has no tool behind it and holds no data. With the
    reader's own GitHub token it fetches STATE.json and the PDFs from the private repository,
-   straight from GitHub into this browser. Nothing can be changed from here. The token is kept
-   in this browser only and is sent to GitHub and nowhere else. */
+   straight from GitHub into this browser. It can change one thing: the mark on a finding,
+   important or irrelevant, which it writes into the note on GitHub when the token is allowed
+   to write. The token is kept in this browser only and is sent to GitHub and nowhere else. */
 const REMOTE = window.ARCHIVE_REMOTE || null;
 const ASSETS = REMOTE ? '' : '/app/';
 /* The fingerprint of the code this page was loaded with. The data says which fingerprint is current,
@@ -99,6 +100,91 @@ async function fetchBytes(url) {
   return res.arrayBuffer();
 }
 
+/* ---- the one change the online copy can make: the mark on a finding ---- */
+
+const NO_WRITE = 'Your token can read the archive but not change it. To mark findings on this page, give the token write access on GitHub (Contents: Read and write), or sign in with a token that has it.';
+const utf8ToB64 = s => { let bin = ''; new TextEncoder().encode(s).forEach(b => { bin += String.fromCharCode(b); }); return btoa(bin); };
+const b64ToUtf8 = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s+/g, '')), c => c.charCodeAt(0)));
+const META_LINE = /^[ \t]*[-*+][ \t]+\**(standing|page|rests on|checked by|marked)\**[ \t]*:/i;
+
+/* The text of a note with the mark of one finding set, changed or removed. It touches the single
+   line `- marked: ...` under the finding's heading and nothing else, as the tool does. Null if the
+   finding is not where it should be. */
+function markInText(text, fid, mark) {
+  const lines = text.split('\n');
+  const head = new RegExp('^###[ \\t]+' + fid.replace('.', '\\.') + '(?![0-9])');
+  const i = lines.findIndex(l => head.test(l));
+  if (i < 0) return null;
+  let j = i + 1, last = -1, at = -1;
+  while (j < lines.length) {
+    if (lines[j].trim()) {
+      const m = META_LINE.exec(lines[j]);
+      if (!m) break;
+      last = j;
+      if (m[1].toLowerCase() === 'marked') at = j;
+    }
+    j++;
+  }
+  if (last < 0) return null;
+  if (at >= 0) { if (mark) lines[at] = '- marked: ' + mark; else lines.splice(at, 1); }
+  else if (mark) lines.splice(last + 1, 0, '- marked: ' + mark);
+  return lines.join('\n');
+}
+
+/* Marks set here that GitHub's rebuilt data does not show yet. The rebuild takes a minute, and
+   the page may be reloaded meanwhile, so they are remembered in this browser until it does. */
+const PENDING = new Map();
+try { Object.entries(JSON.parse(lsGet('eia.pending') || '{}')).forEach(e => { if (e[1] && typeof e[1].until === 'number') PENDING.set(e[0], e[1]); }); } catch (e) {}
+const savePending = () => { if (PENDING.size) lsSet('eia.pending', JSON.stringify(Object.fromEntries(PENDING))); else lsDel('eia.pending'); };
+function overlayPending(findings) {
+  if (!PENDING.size) return;
+  const now = Date.now();
+  PENDING.forEach((p, id) => {
+    const f = findings.find(x => x.id === id);
+    if (!f || now > p.until || (f.mark || '') === p.mark) PENDING.delete(id);
+    else f.mark = p.mark;
+  });
+  savePending();
+}
+
+async function remoteMark(id, mark) {
+  mark = mark === 'important' || mark === 'irrelevant' ? mark : '';
+  const f = S.ix.byId.get(id), n = f && S.ix.noteByNum.get(f.note);
+  if (!f || !n || !/^notes\/[0-9]+-[A-Za-z0-9._-]+$/.test(n.dir || '')) throw new Error('That finding was not found. Reload the page and try again.');
+  const url = REMOTE.api + '/repos/' + REMOTE.repo + '/contents/' + segs(n.dir + '/README.md');
+  const headers = { Authorization: 'Bearer ' + ghToken, Accept: 'application/vnd.github+json' };
+  const offline = 'GitHub could not be reached. Nothing was changed.';
+  for (let attempt = 0; ; attempt++) {
+    let res;
+    try { res = await fetch(url + '?ref=' + encodeURIComponent(REMOTE.branch), { headers: headers, cache: 'no-store' }); } catch (e) { throw new Error(offline); }
+    if (res.status === 401) throw new Error('GitHub no longer accepts your token. Sign out and sign in again.');
+    if (!res.ok) throw new Error('The note could not be read from GitHub. Nothing was changed.');
+    const cur = await res.json();
+    const text = b64ToUtf8(cur.content || '');
+    const next = markInText(text, f.id, mark);
+    if (next === null) throw new Error('Finding ' + f.id + ' is not where it was in its note. Reload the page and try again.');
+    if (next !== text) {
+      const message = f.id + ': ' + (mark ? 'marked ' + mark : 'no longer marked ' + (f.mark || 'anything'));
+      try {
+        res = await fetch(url, { method: 'PUT', headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+          body: JSON.stringify({ message: message, content: utf8ToB64(next), sha: cur.sha, branch: REMOTE.branch }) });
+      } catch (e) { throw new Error(offline); }
+      if (res.status === 409 && attempt === 0) continue;
+      if (res.status === 401) throw new Error('GitHub no longer accepts your token. Sign out and sign in again.');
+      if (res.status === 403 || res.status === 404) throw new Error(NO_WRITE);
+      if (!res.ok) throw new Error('GitHub did not accept the change. Nothing was changed.');
+    }
+    break;
+  }
+  PENDING.set(f.id, { mark: mark, until: Date.now() + 10 * 60 * 1000 });
+  savePending();
+  f.mark = mark;
+  reindex();
+  emit();
+  [45000, 100000].forEach(ms => setTimeout(poll, ms));
+  return { ok: true };
+}
+
 /* The archive as GitHub last built it, or null if it has not changed since we last asked. */
 async function remoteState() {
   const res = await ghFetch('STATE.json', S.rev);
@@ -113,6 +199,8 @@ async function remoteState() {
 
 function signOut(code) {
   lsDel('eia.token');
+  lsDel('eia.pending');
+  PENDING.clear();
   ghToken = '';
   S.rev = '';
   S.notes = [];
@@ -179,11 +267,11 @@ function SignIn() {
     </div>
     ${S.signinError ? html`<p class="err-line" role="alert">${SIGNIN_ERRORS[S.signinError] || SIGNIN_ERRORS.offline}</p>` : null}
     <div class="hstack"><button class="btn primary" type="submit" disabled=${busy || !v.trim()}>${busy ? 'Opening…' : 'Open the archive'}</button></div>
-    <p class="hint">The token is kept in this browser and sent only to GitHub. Signing out removes it. This page can read the archive but never change it.</p>
+    <p class="hint">The token is kept in this browser and sent only to GitHub. Signing out removes it. This page reads the archive. The one thing it can change is the mark on a finding, important or irrelevant, and only with a token that is allowed to write.</p>
     <details>
       <summary>How to get a token</summary>
-      <p><b>If the repository is yours.</b> <a href=${own} target="_blank" rel="noopener">Create a fine-grained token</a>. Under "Repository access" choose "Only select repositories" and pick the archive. Under "Permissions", "Contents" must say "Read-only". Generate the token and paste it above.</p>
-      <p><b>If you were invited to the repository.</b> GitHub's narrow tokens do not reach repositories you were invited to, so <a href=${classic} target="_blank" rel="noopener">create a classic token</a> with the "repo" scope. That token can read every private repository you can, so use it for this page only.</p>
+      <p><b>If the repository is yours.</b> <a href=${own} target="_blank" rel="noopener">Create a fine-grained token</a>. Under "Repository access" choose "Only select repositories" and pick the archive. Under "Permissions", set "Contents" to "Read-only", or to "Read and write" if you want to mark findings as important or irrelevant from this page. Generate the token and paste it above.</p>
+      <p><b>If you were invited to the repository.</b> GitHub's narrow tokens do not reach repositories you were invited to, so <a href=${classic} target="_blank" rel="noopener">create a classic token</a> with the "repo" scope. That token can read and change every private repository you can, so use it for this page only.</p>
     </details>
   </form></div>`;
 }
@@ -453,6 +541,7 @@ function apply(st) {
   if (!S.by) S.by = S.me;
   S.notes = st.notes || [];
   S.findings = st.findings || [];
+  if (REMOTE) overlayPending(S.findings);
   S.questions = st.questions || [];
   S.picture = st.picture || '';
   S.problems = st.problems || [];
@@ -478,7 +567,10 @@ async function post(url, type, payload) {
 }
 
 async function call(path, body) {
-  if (REMOTE) throw new Error('This online copy is read-only. To change the archive, use the app on your computer or an agent.');
+  if (REMOTE) {
+    if (path === 'finding/mark') return remoteMark(body.id, body.mark);
+    throw new Error('This online copy cannot do that. Use the app on your computer or an agent.');
+  }
   let res, data = null;
   try {
     res = body === undefined ? await fetch('/api/' + path, { cache: 'no-store' }) : await post('/api/' + path, 'application/json', JSON.stringify(body));
@@ -819,7 +911,7 @@ function Rail() {
     <div class="tabs">${tabs.map(t => html`<a key=${t[0]} class="tab" href=${'#' + t[0]} aria-current=${cur === t[0] ? 'page' : null}>${t[1]}${t[2] ? html`<span class="n">${t[2]}</span>` : null}</a>`)}</div>
     <div class="rail-end">
       ${bad.length ? html`<button class="btn sm warn" aria-expanded=${S.ui.panel === 'problems'} onClick=${() => { S.ui.panel = S.ui.panel === 'problems' ? null : 'problems'; emit(); }}>${plural(bad.length, 'problem')}</button>` : null}
-      ${REMOTE ? (S.phase === 'signin' ? null : html`<span class="ro">Read-only</span><button class="btn quiet sm" onClick=${signOut}>Sign out</button>`) : html`<${SyncControl} />
+      ${REMOTE ? (S.phase === 'signin' ? null : html`<span class="ro">Online copy</span><button class="btn quiet sm" onClick=${signOut}>Sign out</button>`) : html`<${SyncControl} />
       <a class="btn primary sm" href="#add"><span class="wide">Add a PDF</span><span class="narrow">Add</span></a>`}
     </div>
   </div></nav>`;
@@ -1190,9 +1282,9 @@ function FindingBlock({ f, source, onPage }) {
       ${usedBy.length ? html`<span>used by <${Refs} ids=${usedBy} /></span>` : null}
       ${mode ? null : html`<span class="grow"></span>
         ${f.mark === 'irrelevant'
-          ? html`<button class="lnk act" disabled=${busy} onClick=${() => setMark('', f.id + ' is back among the findings.')}>Restore</button>`
-          : html`<button class="lnk act" disabled=${busy} onClick=${() => setMark(f.mark === 'important' ? '' : 'important', f.id + (f.mark === 'important' ? ' is no longer marked important.' : ' marked important.'))}>${f.mark === 'important' ? 'Not important' : 'Important'}</button>
-            <button class="lnk act" disabled=${busy} onClick=${() => setMark('irrelevant', f.id + ' marked irrelevant. It stays in its note.')}>Irrelevant</button>`}
+          ? html`<button class="lnk act mk" disabled=${busy} onClick=${() => setMark('', f.id + ' is back among the findings.')}>Restore</button>`
+          : html`<button class="lnk act mk" disabled=${busy} onClick=${() => setMark(f.mark === 'important' ? '' : 'important', f.id + (f.mark === 'important' ? ' is no longer marked important.' : ' marked important.'))}>${f.mark === 'important' ? 'Not important' : 'Mark important'}</button>
+            <button class="lnk act mk" disabled=${busy} onClick=${() => setMark('irrelevant', f.id + ' marked irrelevant. It stays in its note.')}>Mark irrelevant</button>`}
         <button class="lnk act" onClick=${() => setMode('remark')}>Remark</button>
         <button class="lnk act" onClick=${() => setMode('edit')}>Edit</button>
         <button class="lnk act danger" onClick=${() => setMode('del')}>Remove</button>`}
@@ -1580,7 +1672,7 @@ function AgentsView() {
       <p class="lede">The archive is a folder of plain files: the PDFs, and Markdown that records what each one claims. Any agent that can open the folder can read it and file into it. The rules live in AGENTS.md at the top of the folder, and INDEX.md gives every note's summary, so an agent can see what has been done without opening a PDF.</p></div>
 
     <section><h3>${REMOTE ? 'Reading online' : g.repo && g.remote && g.upstream ? 'Shared through GitHub' : 'Not shared yet'}</h3>
-      ${REMOTE ? html`<p>You are reading the archive online, straight from its private GitHub repository. This copy cannot change anything. To add a note, set a standing or sync, use the app on your computer (<code>./archive open</code>) or an agent.</p>`
+      ${REMOTE ? html`<p>You are reading the archive online, straight from its private GitHub repository. The only thing this copy can change is the mark on a finding, important or irrelevant. To add a note, set a standing or sync, use the app on your computer (<code>./archive open</code>) or an agent.</p>`
         : g.repo && g.remote && g.upstream
         ? html`<p>This folder is tied to a private GitHub repository${g.branch ? html` (branch <code>${g.branch}</code>)` : ''}. Sync sends your changes there and takes in your collaborator's. Whoever can open that repository, and only they, can read the archive.${S.viewer ? html` It can also be read online, after signing in with a GitHub token, at <a href=${S.viewer} target="_blank" rel="noopener">${S.viewer}</a>.` : ''}</p>`
         : g.repo && g.remote

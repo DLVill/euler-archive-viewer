@@ -373,7 +373,7 @@ textarea.editor { min-height: 58vh; font-family: var(--mono); font-size: 13.5px;
 
 /* ---------- the online, read-only copy ---------- */
 .readonly .ident-btn, .readonly .ident, .readonly .empty .hstack, .readonly .actions .btn:not(.primary),
-.readonly .handoff, .readonly .sec-head .btn, .readonly .inline-form, .readonly .lnk.act, .readonly .pic-tools,
+.readonly .handoff, .readonly .sec-head .btn, .readonly .inline-form, .readonly .lnk.act:not(.mk), .readonly .pic-tools,
 .readonly .chip .caret { display: none !important; }
 .readonly button.chip { pointer-events: none; }
 .ro { font-size: 12.5px; color: var(--ink-3); }
